@@ -115,6 +115,9 @@ pub struct VerilatedModelConfig {
     /// Whether this model should be compiled with tracing support.
     pub enable_tracing: bool,
 
+    /// Wheter to set the --no-trace-top verilator flag
+    pub no_trace_top: bool,
+
     /// Optionally specify the C++ standard used by Verilator.
     pub cxx_standard: Option<CxxStandard>,
 }
@@ -125,6 +128,7 @@ impl Default for VerilatedModelConfig {
             verilator_optimization: Default::default(),
             ignored_warnings: Default::default(),
             enable_tracing: Default::default(),
+            no_trace_top: false,
             cxx_standard: Some(CxxStandard::Cxx14),
         }
     }

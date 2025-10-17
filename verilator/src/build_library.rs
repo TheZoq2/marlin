@@ -443,6 +443,7 @@ pub fn build_library(
         .args(["--lib-create", &library_name])
         .args(["--Mdir", verilator_artifact_directory.as_str()])
         .args(["--top-module", top_module])
+        .args(if config.no_trace_top {["--no-trace-top"].as_slice()} else {[].as_slice()})
         .args(source_files)
         .arg(ffi_wrappers);
     for include_directory in include_directories {
