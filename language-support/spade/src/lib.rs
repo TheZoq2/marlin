@@ -6,6 +6,8 @@
 
 //! Spade integration for Marlin.
 
+pub mod type_translation;
+
 use std::{env::current_dir, ffi::OsString, fs, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};

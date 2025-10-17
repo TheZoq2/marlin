@@ -17,8 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use snafu::{Whatever, prelude::*};
 
 use crate::{
-    PortDirection, VerilatedModelConfig, VerilatorRuntimeOptions,
-    dpi::DpiFunction,
+    demangle, dpi::DpiFunction, PortDirection, VerilatedModelConfig, VerilatorRuntimeOptions
 };
 
 fn build_ffi_for_tracing(
@@ -442,8 +441,7 @@ pub fn build_library(
         .args(["-CFLAGS", &cflags])
         .args(["--lib-create", &library_name])
         .args(["--Mdir", verilator_artifact_directory.as_str()])
-        .args(["--top-module", top_module])
-        .args(if config.no_trace_top {["--no-trace-top"].as_slice()} else {[].as_slice()})
+        .args(["--top-module", &demangle(&top_module)])
         .args(source_files)
         .arg(ffi_wrappers);
     for include_directory in include_directories {
@@ -465,6 +463,7 @@ pub fn build_library(
     }
     if config.enable_tracing {
         verilator_command.arg("--trace");
+        verilator_command.args(dbg!(if config.no_trace_top {["--no-trace-top", "--main-top-name", "-"].as_slice()} else {[].as_slice()}));
     }
     if verbose {
         log::info!("| Verilator invocation: {:?}", verilator_command);

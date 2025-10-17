@@ -14,8 +14,8 @@
 
 use marlin::spade::prelude::*;
 
-#[spade(src = "src/main.spade", name = "main")]
+#[spade(top = "test_swim::main")]
 pub struct Main;
 
-#[spade(src = "src/main.spade", name = "vga")]
-pub struct VgaTopShouldCompile;
+// #[spade(top = "test_swim::vga")]
+// pub struct VgaTopShouldCompile;

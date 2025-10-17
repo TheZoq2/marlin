@@ -18,8 +18,17 @@ marlin-verilator.workspace = true
 camino.workspace = true
 
 proc-macro2.workspace = true
+proc-macro-error.workspace = true
 syn.workspace = true
 quote.workspace = true
 
-spade-parser.workspace = true
-spade-ast.workspace = true
+spade-common.workspace = true
+spade-hir.workspace = true
+spade-lang.workspace = true
+spade-typeinference.workspace = true
+spade-hir-lowering.workspace = true
+spade-types.workspace = true
+
+num.workspace = true
+bincode.workspace = true
+itertools.workspace = true
