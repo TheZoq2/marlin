@@ -93,10 +93,39 @@ impl Mirror for TypeExpression {
     }
 }
 
-impl Mirror for TypeSpec {
+trait TypeSpecExt {
     fn mirror(
         &self,
         primitive_map: &HashMap<NameID, TokenStream>,
+    ) -> TokenStream;
+    fn mirror_with_turbofish(
+        &self,
+        primitive_map: &HashMap<NameID, TokenStream>,
+    ) -> TokenStream;
+    fn mirror_impl(
+        &self,
+        primitive_map: &HashMap<NameID, TokenStream>,
+        turbofish: bool,
+    ) -> TokenStream;
+}
+
+impl TypeSpecExt for TypeSpec {
+    fn mirror(
+        &self,
+        primitive_map: &HashMap<NameID, TokenStream>,
+    ) -> TokenStream {
+        self.mirror_impl(primitive_map, false)
+    }
+    fn mirror_with_turbofish(
+        &self,
+        primitive_map: &HashMap<NameID, TokenStream>,
+    ) -> TokenStream {
+        self.mirror_impl(primitive_map, true)
+    }
+    fn mirror_impl(
+        &self,
+        primitive_map: &HashMap<NameID, TokenStream>,
+        turbofish: bool,
     ) -> TokenStream {
         match self {
             TypeSpec::Declared(name, generic_params) => {
@@ -107,7 +136,12 @@ impl Mirror for TypeSpec {
                     let params = generic_params
                         .iter()
                         .map(|param| param.mirror(primitive_map));
-                    quote!(#name < #(#params),* >)
+                    let turbofish = if turbofish {
+                        quote!(::)
+                    } else {
+                        quote!()
+                    };
+                    quote!(#name #turbofish < #(#params),* >)
                 }
             }
             TypeSpec::Generic(name) => {
@@ -125,11 +159,11 @@ impl Mirror for TypeSpec {
             }
             TypeSpec::Inverted(inner) => {
                 // TODO: This is just flat out wrong, but needed for the prototype to compile
-                inner.mirror(primitive_map)
+                inner.mirror_impl(primitive_map, turbofish)
             }
             // Wires are irrelevant to the testing system, we can just treat them as their non-wire
             // counterpart
-            TypeSpec::Wire(w) => w.mirror(primitive_map),
+            TypeSpec::Wire(w) => w.mirror_impl(primitive_map, turbofish),
 
             TypeSpec::TraitSelf(_) => {
                 quote!()
@@ -207,21 +241,22 @@ impl TypeDeclarationExt for TypeDeclaration {
                 );
 
                 let sizes =
-                    s.members.0.iter().map(|Parameter { name, .. }| {
-                        let name = name.mirror();
-                        quote!(self.#name.size())
+                    s.members.0.iter().map(|Parameter { ty, .. }| {
+                        let ty = ty.mirror_with_turbofish(primitive_map);
+                        quote!(#ty::size())
                     });
                 let backward_sizes =
-                    s.members.0.iter().map(|Parameter { name, .. }| {
-                        let name = name.mirror();
-                        quote!(self.#name.size())
+                    s.members.0.iter().map(|Parameter { ty, .. }| {
+                        let ty = ty.mirror_with_turbofish(primitive_map);
+                        quote!(#ty::backward_size())
                     });
 
                 let field_updaters = s.members.0.iter().map(|param| {
                     let name = &param.name.mirror();
+                    let ty = param.ty.mirror_with_turbofish(primitive_map);
                     quote! {
                         self.#name.update_value(bit_offset + local_offset, bits);
-                        local_offset += self.#name.size();
+                        local_offset += #ty :: size();
                     }
                 });
 
@@ -317,6 +352,10 @@ pub fn mirror_types(compiler_state: &CompilerState) -> TokenStream {
             quote! {marlin::spade::type_translation::SpadeUint},
         ),
         (["bool"].as_slice(), quote! {bool}),
+        (
+            ["std", "option", "Option"].as_slice(),
+            quote! {std::option::Option},
+        ),
     ]
     .into_iter()
     .map(|(name, value)| {

@@ -1,6 +1,6 @@
 pub trait SpadeType {
-    fn size(&self) -> usize;
-    fn backward_size(&self) -> usize;
+    fn size() -> usize;
+    fn backward_size() -> usize;
 
     /// Update the value of this type based on the `bits`. The `start_bit` and `end_bit` parameters
     /// are the bit offsets at which this value starts in `bits`. `start_bit` must be respected, but
@@ -13,16 +13,27 @@ pub trait SpadeType {
     );
 }
 
+fn get_unaligned_u32(bit_offset: usize, bits: &[u32]) -> u32 {
+    let start_idx = bit_offset / 32;
+    let shift_amount = bit_offset % 32;
+    if shift_amount == 0 {
+        bits[start_idx]
+    } else {
+        bits[start_idx] >> shift_amount | bits[start_idx + 1] << (32 - shift_amount)
+    }
+}
+
 pub struct SpadeUint<const N: u64> {
     inner: u64,
 }
 
+
 impl<const N: u64> SpadeType for SpadeUint<N> {
-    fn size(&self) -> usize {
+    fn size() -> usize {
         N as usize
     }
 
-    fn backward_size(&self) -> usize {
+    fn backward_size() -> usize {
         0
     }
 
@@ -31,24 +42,47 @@ impl<const N: u64> SpadeType for SpadeUint<N> {
         bit_offset: usize,
         bits: &[u32],
     ) {
-        let start_idx = bit_offset / 32;
-        let shift_amount = bit_offset % 32;
+        self.inner = if N > 32 {
+            get_unaligned_u32(bit_offset, bits) as u64
+        } else {
+            get_unaligned_u32(bit_offset, bits) as u64 | (get_unaligned_u32(bit_offset + 32, bits) as u64) << 32
+        }
+    }
+}
 
-        let from_0 = bits[start_idx] >> shift_amount;
-        let from_1 = if N > 32 {
-            bits[start_idx + 1] >> shift_amount
-        } else {
-            0
-        };
-        let remaining = if shift_amount != 0 {
-            if N > 32 {
-                bits[start_idx + 2] >> shift_amount
-            } else {
-                bits[start_idx + 1] >> shift_amount
-            }
-        } else {
-            0
-        };
+impl SpadeType for bool {
+    fn size() -> usize {
+        1
+    }
+
+    fn backward_size() -> usize {
+        0
+    }
+
+    fn update_value(
+        &mut self,
+        bit_offset: usize,
+        bits: &[u32],
+    ) {
+        *self = get_unaligned_u32(bit_offset, bits) | 1 == 1
+    }
+}
+
+impl<T: SpadeType> SpadeType for Option<T> {
+    fn size() -> usize {
+        todo!()
+    }
+
+    fn backward_size() -> usize {
+        todo!()
+    }
+
+    fn update_value(
+        &mut self,
+        bit_offset: usize,
+        bits: &[u32],
+    ) {
+        todo!()
     }
 }
 

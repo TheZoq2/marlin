@@ -223,6 +223,7 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
     );
 
     let type_definitions = mirror_types(&compiler_state);
+    // panic!("{type_definitions}");
 
     quote::quote!{
         #verilator
