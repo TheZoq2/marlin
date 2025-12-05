@@ -266,11 +266,11 @@ impl TypeDeclarationExt for TypeDeclaration {
                     }
 
                     impl #generics marlin::spade::type_translation::SpadeType for #name #impl_generics {
-                        fn size(&self) -> usize {
+                        fn size() -> usize {
                             #(#sizes)+*
                         }
 
-                        fn backward_size(&self) -> usize {
+                        fn backward_size() -> usize {
                             #(#backward_sizes)+*
                         }
 

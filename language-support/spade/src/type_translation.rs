@@ -70,11 +70,11 @@ impl SpadeType for bool {
 
 impl<T: SpadeType> SpadeType for Option<T> {
     fn size() -> usize {
-        todo!()
+        1 + T::size()
     }
 
     fn backward_size() -> usize {
-        todo!()
+        0
     }
 
     fn update_value(

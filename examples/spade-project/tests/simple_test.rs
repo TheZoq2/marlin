@@ -33,9 +33,11 @@ fn main() -> Result<(), Whatever> {
 
     let mut main = runtime.create_model_simple::<Main>()?;
 
+    main.in_val_i = 42;
+
     main.eval();
-    println!("{}", main.out);
-    assert_eq!(main.out, 42); // hardcoded into Spade source
+    println!("{}", main.out_o);
+    assert_eq!(main.out_o, 42); // hardcoded into Spade source
 
     Ok(())
 }

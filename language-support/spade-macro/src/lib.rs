@@ -125,7 +125,7 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let top_unit = match top_unit {
         spade_hir::ExecutableItem::Unit(unit) => unit,
-        spade_hir::ExecutableItem::ExternUnit(unit_name, loc) => {
+        spade_hir::ExecutableItem::ExternUnit(_, _) => {
             return syn::Error::new_spanned(
                 args.top,
                 format!("Top unit is an extern unit, which cannot be tested"),
@@ -209,10 +209,12 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
+    // TODO: Add the output value
+
     let verilator = build_verilated_struct(
         "spade",
         syn::LitStr::new(
-            &mangle(top_unit.name.as_mir().without_escapes()).unwrap(),
+            &mangle(&top_unit.name.as_mir().without_escapes()).unwrap(),
             args.top.span(),
         ),
         verilog_source_path,
