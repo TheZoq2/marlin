@@ -38,6 +38,7 @@ mod build_library;
 pub mod dpi;
 pub mod dynamic;
 pub mod vcd;
+pub mod types;
 
 pub use dynamic::AsDynamicVerilatedModel;
 
@@ -87,32 +88,6 @@ pub fn demangle(s: &str) -> String {
         .join("")
 }
 
-/// Verilator-defined types for C FFI.
-pub mod types {
-    /// From the Verilator documentation: "Data representing 'bit' of 1-8 packed
-    /// bits."
-    pub type CData = u8;
-
-    /// From the Verilator documentation: "Data representing 'bit' of 9-16
-    /// packed bits"
-    pub type SData = u16;
-
-    /// From the Verilator documentation: "Data representing 'bit' of 17-32
-    /// packed bits."
-    pub type IData = u32;
-
-    /// From the Verilator documentation: "Data representing 'bit' of 33-64
-    /// packed bits."
-    pub type QData = u64;
-
-    /// From the Verilator documentation: "Data representing one element of
-    /// WData array."
-    pub type EData = u32;
-
-    /// From the Verilator documentation: "Data representing >64 packed bits
-    /// (used as pointer)."
-    pub type WData = EData;
-}
 
 /// <https://www.digikey.com/en/maker/blogs/2024/verilog-ports-part-7-of-our-verilog-journey>
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

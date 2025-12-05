@@ -12,6 +12,9 @@ use spade_hir::{
     Parameter, TypeDeclaration, TypeExpression, TypeParam, TypeSpec,
 };
 
+type PrimitiveMap = HashMap<NameID, TokenStream>;
+
+
 /// NameIDs always contain their fully qualified paths, but for some things, we want the
 /// non-FQP, for example, for generic arguments. Hence the special mirror functions
 trait NameIDExt {
@@ -19,7 +22,7 @@ trait NameIDExt {
     /// (relative to the module where things will be inserted)
     fn mirror_global(
         &self,
-        primitives: &HashMap<NameID, TokenStream>,
+        primitives: &PrimitiveMap,
     ) -> TokenStream;
     fn mirror_local(&self) -> TokenStream;
 }
@@ -27,7 +30,7 @@ trait NameIDExt {
 impl NameIDExt for NameID {
     fn mirror_global(
         &self,
-        primitives: &HashMap<NameID, TokenStream>,
+        primitives: &PrimitiveMap,
     ) -> TokenStream {
         primitives.get(self).cloned().unwrap_or_else(|| {
             let full = format_ident!("spade_types");
@@ -66,21 +69,30 @@ impl IdentExt for Identifier {
 trait Mirror {
     fn mirror(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream;
 }
 
 impl Mirror for TypeExpression {
     fn mirror(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream {
         match self {
             TypeExpression::TypeSpec(type_spec) => {
                 type_spec.mirror(primitive_map)
             }
             TypeExpression::Integer(val) => {
-                let val = val.to_str_radix(10);
+                // let val = val.to_str_radix(10);
+                let (sign, val) = val.to_u64_digits();
+                if val.len() > 1 {
+                    panic!("Type level integers > 64 bits are currently unsupported");
+                }
+                let val = if matches!(sign, num::bigint::Sign::Minus) {
+                    panic!("Negative type level integers are not currently supported")
+                } else {
+                    val[0]
+                };
                 quote!({ #val })
             }
             TypeExpression::String(_) => {
@@ -93,18 +105,18 @@ impl Mirror for TypeExpression {
     }
 }
 
-trait TypeSpecExt {
+pub trait TypeSpecExt {
     fn mirror(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream;
     fn mirror_with_turbofish(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream;
     fn mirror_impl(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
         turbofish: bool,
     ) -> TokenStream;
 }
@@ -112,19 +124,19 @@ trait TypeSpecExt {
 impl TypeSpecExt for TypeSpec {
     fn mirror(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream {
         self.mirror_impl(primitive_map, false)
     }
     fn mirror_with_turbofish(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> TokenStream {
         self.mirror_impl(primitive_map, true)
     }
     fn mirror_impl(
         &self,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
         turbofish: bool,
     ) -> TokenStream {
         match self {
@@ -179,7 +191,7 @@ trait TypeDeclarationExt {
     fn mirror(
         &self,
         name: &NameID,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> Option<TokenStream>;
 }
 
@@ -187,7 +199,7 @@ impl TypeDeclarationExt for TypeDeclaration {
     fn mirror(
         &self,
         name: &NameID,
-        primitive_map: &HashMap<NameID, TokenStream>,
+        primitive_map: &PrimitiveMap,
     ) -> Option<TokenStream> {
         let generics = match self.generic_args.as_slice() {
             [] => quote! {},
@@ -219,6 +231,12 @@ impl TypeDeclarationExt for TypeDeclaration {
                 Some(quote! {
                     enum #name #generics {
                         A(std::marker::PhantomData<( #(#raw_generics),* )>)
+                    }
+
+                    impl #generics Default for #name<#(#raw_generics),*> {
+                        fn default() -> Self {
+                            #name::A(Default::default())
+                        }
                     }
                 })
             }
@@ -261,6 +279,7 @@ impl TypeDeclarationExt for TypeDeclaration {
                 });
 
                 let def = quote! {
+                    #[derive(Default)]
                     pub struct #name #generics {
                         #(#fields),*
                     }
@@ -341,7 +360,7 @@ impl<'a> ModEntry<'a> {
     }
 }
 
-pub fn mirror_types(compiler_state: &CompilerState) -> TokenStream {
+pub fn mirror_types(compiler_state: &CompilerState) -> (TokenStream, PrimitiveMap) {
     let symtab = compiler_state.symtab.symtab();
 
     // TODO: More
@@ -407,5 +426,5 @@ pub fn mirror_types(compiler_state: &CompilerState) -> TokenStream {
 
     let result = ModEntry::Submod("spade_types", modules).emit();
     // panic!("{result}");
-    result
+    (result, primitives)
 }

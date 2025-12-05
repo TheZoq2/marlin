@@ -33,11 +33,24 @@ fn main() -> Result<(), Whatever> {
 
     let mut main = runtime.create_model_simple::<Main>()?;
 
-    main.in_val_i = 42;
+    for i in 0..10 {
+        if i % 2 == 0 {
+            main.valid_i = 0;
+        } else {
+            main.valid_i = 1;
+            main.in_val_i = i;
+        }
 
-    main.eval();
-    println!("{}", main.out_o);
-    assert_eq!(main.out_o, 42); // hardcoded into Spade source
+        main.eval();
+
+        match &main.out {
+            Some(val) => println!("It was valid and the value was {val}"),
+            None => println!("It was invalid"),
+        }
+    }
+
+
+    panic!("I want the stdout");
 
     Ok(())
 }

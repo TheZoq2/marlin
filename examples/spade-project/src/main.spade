@@ -1,5 +1,6 @@
-entity main(in_val: int<8>, out: inv &int<8>) {
-    set out = &in_val;
+entity main(valid: bool, in_val: uint<6>, out: inv &Option<uint<6>>) {
+    set out = &if valid {Some(in_val)} else {None};
+    // set out = &Some(42);
 }
 
 #[no_mangle(all)]

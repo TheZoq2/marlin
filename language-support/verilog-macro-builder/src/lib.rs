@@ -66,11 +66,46 @@ impl syn::parse::Parse for MacroArgs {
     }
 }
 
+pub struct VerilogPort {
+    name: String,
+    msb: usize,
+    lsb: usize,
+    direction: PortDirection,
+
+    is_pub: bool,
+}
+
+impl VerilogPort {
+    pub fn new(name: String, size: usize, direction: PortDirection) -> Self {
+        Self {
+            name,
+            msb: size,
+            lsb: 0,
+            direction,
+            is_pub: true
+        }
+    }
+
+    pub fn is_pub(mut self, is_pub: bool) -> Self {
+        self.is_pub = is_pub;
+        self
+    }
+}
+
+#[derive(Default)]
+pub struct Hooks {
+    pub extra_fields: Vec<TokenStream>,
+    pub extra_init: Vec<TokenStream>,
+    pub pre_preeval: Vec<TokenStream>,
+    pub post_posteval: Vec<TokenStream>,
+}
+
 pub fn build_verilated_struct(
     macro_name: &str,
     top_name: syn::LitStr,
     source_path: syn::LitStr,
-    verilog_ports: Vec<(String, usize, usize, PortDirection)>,
+    verilog_ports: Vec<VerilogPort>,
+    hooks: Hooks,
     clock_port: Option<syn::LitStr>,
     reset_port: Option<syn::LitStr>,
     item: TokenStream,
@@ -112,8 +147,18 @@ pub fn build_verilated_struct(
         model,
         _marker: std::marker::PhantomData
     });
+    verilated_model_init_self.extend_from_slice(&hooks.extra_init);
 
-    for (port_name, port_msb, port_lsb, port_direction) in verilog_ports {
+    struct_members.extend_from_slice(&hooks.extra_fields);
+
+    for VerilogPort {
+        name: port_name,
+        msb: port_msb,
+        lsb: port_lsb,
+        direction: port_direction,
+        is_pub,
+    } in verilog_ports
+    {
         if port_name.chars().any(|c| c == '\\' || c == ' ') {
             return syn::Error::new_spanned(
                 top_name,
@@ -148,9 +193,10 @@ pub fn build_verilated_struct(
             ),
             top_name.span(),
         );
+        let maybe_pub = if is_pub {Some(quote!(pub))} else {None};
         struct_members.push(quote! {
             #[doc = #port_documentation]
-            pub #port_name_ident: #port_type
+            #maybe_pub #port_name_ident: #port_type
         });
         verilated_model_init_self.push(quote! {
             #port_name_ident: 0 as _
@@ -258,6 +304,8 @@ pub fn build_verilated_struct(
     let struct_name = item.ident;
     let vis = item.vis;
     let port_count = verilated_model_ports_impl.len();
+    let pre_preeval = hooks.pre_preeval;
+    let post_posteval = hooks.post_posteval;
     quote! {
         #vis struct #struct_name<'ctx> {
             #[doc(hidden)]
@@ -277,9 +325,11 @@ pub fn build_verilated_struct(
         impl<'ctx> #struct_name<'ctx> {
             #[doc = "Equivalent to the Verilator `eval` method."]
             pub fn eval(&mut self) {
+                #(#pre_preeval)*
                 #(#preeval_impl)*
                 (self.eval_model)(self.model);
                 #(#posteval_impl)*
+                #(#post_posteval)*
             }
 
             pub fn open_vcd(

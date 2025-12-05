@@ -9,16 +9,22 @@ mod types;
 use std::env;
 
 use camino::Utf8PathBuf;
+use itertools::Itertools;
 use marlin_verilator::{PortDirection, mangle};
-use marlin_verilog_macro_builder::build_verilated_struct;
+use marlin_verilog_macro_builder::{
+    Hooks, VerilogPort, build_verilated_struct,
+};
 use num::ToPrimitive;
 use proc_macro::TokenStream;
+use quote::{format_ident, quote};
 
 use proc_macro_error::proc_macro_error;
 use spade as spade_compiler;
 use spade_compiler::compiler_state::CompilerState;
 use spade_hir_lowering::{MirLowerable, UnitNameExt};
 use types::mirror_types;
+
+use crate::types::TypeSpecExt;
 
 // TODO: Move into a more general place
 struct MacroArgs {
@@ -166,8 +172,14 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
         .type_state
         .clone();
 
+    let (type_definitions, primitive_map) = mirror_types(&compiler_state);
+
     let mut ports = vec![];
-    for ((name, _hir_type), param) in
+    let mut extra_fields = vec![];
+    let mut extra_init = vec![];
+    let mut pre_hooks = vec![];
+    let mut post_hooks = vec![];
+    for ((name, hir_type), param) in
         top_unit.inputs.iter().zip(top_unit.head.inputs.0.clone())
     {
         let ty = type_state
@@ -178,7 +190,7 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
             )
             .expect("Expected a concrete type for {name}");
 
-        let name = if param.no_mangle.is_some() {
+        let verilog_name = if param.no_mangle.is_some() {
             param.name.0.to_string()
         } else {
             format!("{}_i", param.name.0)
@@ -191,25 +203,52 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
             .to_usize()
             .expect("Types with more than 2^64 bits are unsupported");
         if size != 0 {
-            ports.push((name, size, 0, PortDirection::Input));
+            ports.push(
+                VerilogPort::new(
+                    verilog_name.clone(),
+                    size,
+                    PortDirection::Input,
+                )
+                // .is_pub(false),
+            );
         }
 
         let back_size = mir_ty
             .backward_size()
             .to_usize()
             .expect("Types with more than 2^64 bits are unsupported");
+        let back_name = param.name.0.clone() + "_o";
         if back_size != 0 {
             // TODO: Verify that this mangling scheme is correct
-            ports.push((
-                param.name.0.clone() + "_o",
-                back_size,
-                0,
-                PortDirection::Output,
-            ));
+            ports.push(
+                VerilogPort::new(
+                    back_name.clone(),
+                    size,
+                    PortDirection::Output,
+                )
+                .is_pub(false),
+            );
+        }
+
+        let field_name = format_ident!("{}", param.name.inner.0);
+        let field_ty = hir_type.mirror(&primitive_map);
+        extra_fields.push(quote! {
+            pub #field_name: #field_ty
+        });
+        extra_init.push(quote! {
+            #field_name: Default::default()
+        });
+
+        if back_size != 0 {
+            let verilog_name = format_ident!("{back_name}");
+            let num_u32_chunks = back_size / 32 + 1;
+            post_hooks.push(quote!{
+                let mut buffer = [0; #num_u32_chunks];
+                marlin::verilator::types::IntoU32s::populate_u32(&self.#verilog_name, &mut buffer);
+                crate::spade::type_translation::SpadeType::update_value(&mut self.#field_name, 0, &mut buffer)
+            });
         }
     }
-
-    // TODO: Add the output value
 
     let verilator = build_verilated_struct(
         "spade",
@@ -219,16 +258,23 @@ pub fn spade(args: TokenStream, item: TokenStream) -> TokenStream {
         ),
         verilog_source_path,
         ports,
+        Hooks {
+            extra_fields,
+            extra_init,
+            pre_preeval: pre_hooks,
+            post_posteval: post_hooks,
+        },
         None,
         None,
         item.into(),
     );
 
-    let type_definitions = mirror_types(&compiler_state);
+    // panic!("{verilator}");
     // panic!("{type_definitions}");
 
-    quote::quote!{
+    quote::quote! {
         #verilator
         #type_definitions
-    }.into()
+    }
+    .into()
 }
